@@ -109,11 +109,13 @@ amazon_scraper <- function(doc, reviewer = T, delay = 0){
     df <- data.frame(title, date, ver.purchase, format, stars, comments, helpful,
                      rver_url, rver_avgrating_10, rver_numrev, rver_numhelpful, rver_rank, stringsAsFactors = F)
     
-  } #else df <- data.frame(title, author, date, ver.purchase, format, stars, comments, helpful, stringsAsFactors = F)
+  } 
+  #else df <- data.frame(title, author, date, ver.purchase, format, stars, comments, helpful, stringsAsFactors = F)
   # Removing 'author', 'helpful' from the dataframe. (Resolving the open issue: Error in data.frame(title, author, date, ver.purchase, format, stars,  arguments imply differing number of rows) 
   # Amazon.com had changed the HTML code of the reviews page. Due to different HTML nodes, this script to extract author, and helpful votes did not work
   # I added the right HTML tags in the code, but still removed them from the data frame
-  else df <- data.frame(title, date, ver.purchase, format, stars, comments, stringsAsFactors = F)
+ 
+ else df <- data.frame(title, date, ver.purchase, format, stars, comments, stringsAsFactors = F)
   
   return(df)
 }
@@ -126,10 +128,21 @@ for(page_num in 1:pages){
   reviews_all <- rbind(reviews_all, cbind(prod, reviews))
 }
 
+# create the words freq table
+word.freq.table <- reviews_all %>% 
+  unnest_tokens(word, comments) %>%
+  anti_join(stop_words) %>%
+  count(word, sort = TRUE)
+word.freq.table
+# Plotting a Wordcloud
+word.freq.table %>% 
+  filter(n>40) %>%
+  with(wordcloud(word, n,
+                 scale = c(5,0.3),
+                 colors = brewer.pal(8, "Dark2")))
 
-Tidy data
 
 Analyze
 
 Visualize
-word cloud
+
