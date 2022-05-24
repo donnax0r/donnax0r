@@ -1,10 +1,1 @@
-- 👋 Hi, I’m @donnax0r
-- 👀 I’m interested in networking and sharing helpful tips
-- 🌱 I’m currently learning python and R
-- 💞️ I’m looking to collaborate on ...
-- 📫 How to reach me 
-
-<!---
-donnax0r/donnax0r is a ✨ special ✨ repository because its `README.md` (this file) appears on your GitHub profile.
-You can click the Preview link to take a look at your changes.
---->
+This is a repository that I have created to showcase skills, share projects and track my progress in data analytics and data science related topics.
