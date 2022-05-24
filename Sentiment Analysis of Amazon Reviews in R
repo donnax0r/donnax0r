@@ -1,15 +1,28 @@
-#load pacman first!
-library("pacman")
+#Install pacman and use it to load all relevant packages
+if(!"pacman" %in% installed.packages()[,"Package"]) install.packages("pacman")
+pacman::p_load_gh("trinker/sentimentr")
+pacman::p_load(XML, dplyr, stringr, rvest, audio, RCurl, wordcloud, RColorBrewer, wordcloud2, tidytext)
 
-#use p_load to load rest of the libraries (less typing!)
-pacman::p_load(XML, dplyr, stringr, rvest, audio)
+#Create a trim function to remove all white spaces
+trim <- function (x) gsub("^\\s+|\\s+$", "", x)
 
-#create scraper function to parse Amazon html pages
-amazon_scraper <- function(doc, reviewer = T, delay = 0){
-  
-  if(!"pacman" %in% installed.packages()[,"Package"]) install.packages("pacman")
-  pacman::p_load_gh("trinker/sentimentr")
-  pacman::p_load(RCurl, XML, dplyr, stringr, rvest, audio)
+#Initialize the product code. It can be found in the product's url
+prod_code = "B0828GDSF6"
+#Use paste0() to create product url
+url <- paste0("https://www.amazon.com/dp/", prod_code)
+#Read the HTML source of the URL and store it in doc
+doc <- read_html(url)
+
+#Extract product name.'#productTitle' gives the product name
+prod <- html_nodes(doc, "#productTitle") %>% html_text() %>% gsub("\n", "", .) %>% trim()
+
+#Product name:
+prod
+
+#Build the review scraper function with these elements: prod, title, author, date, ver.purchase, format, stars, comments, helpful 
+# source("https://raw.githubusercontent.com/rjsaito/Just-R-Things/master/Text%20Mining/amazonscraper.R")
+
+review_scraper <- function(doc, reviewer = T, delay = 0){
   
   sec = 0
   if(delay < 0) warning("delay was less than 0: set to 0")
@@ -51,9 +64,8 @@ amazon_scraper <- function(doc, reviewer = T, delay = 0){
   comments <- doc %>%
     html_nodes("#cm_cr-review_list .review-text") %>%
     html_text() 
-
   
-  # Helpful votes number cannot be extracted from reviews with no helpful votes cast
+#Helpful votes number cannot be extracted from reviews with no helpful votes cast
   helpful <- doc %>%
     html_nodes("#cm_cr-review_list  .cr-vote-text") %>%
     html_text() %>%
@@ -110,39 +122,93 @@ amazon_scraper <- function(doc, reviewer = T, delay = 0){
                      rver_url, rver_avgrating_10, rver_numrev, rver_numhelpful, rver_rank, stringsAsFactors = F)
     
   } 
-  #else df <- data.frame(title, author, date, ver.purchase, format, stars, comments, helpful, stringsAsFactors = F)
-  # Removing 'author', 'helpful' from the dataframe. (Resolving the open issue: Error in data.frame(title, author, date, ver.purchase, format, stars,  arguments imply differing number of rows) 
-  # Amazon.com had changed the HTML code of the reviews page. Due to different HTML nodes, this script to extract author, and helpful votes did not work
-  # I added the right HTML tags in the code, but still removed them from the data frame
- 
- else df <- data.frame(title, date, ver.purchase, format, stars, comments, stringsAsFactors = F)
+  else df <- data.frame(title, date, ver.purchase, format, stars, comments, stringsAsFactors = F)
   
   return(df)
 }
+
+
+#Iniitialize the number of pages of reviews you want to extract 
 pages <- 10
+
+#Initializing the reviews_all variable as NULL
 reviews_all <- NULL
+
+#Extracting the first ten pages of reviews and storing it in 'reviews_all' list variable
 for(page_num in 1:pages){
   url <- paste0("http://www.amazon.com/product-reviews/",prod_code,"/?pageNumber=", page_num)
   doc <- read_html(url)  
-  reviews <- amazon_scraper(doc, reviewer = F, delay = 2)
+  reviews <- review_scraper(doc, reviewer = F, delay = 2)
   reviews_all <- rbind(reviews_all, cbind(prod, reviews))
 }
 
-# create the words freq table
-word.freq.table <- reviews_all %>% 
-  unnest_tokens(word, comments) %>%
-  anti_join(stop_words) %>%
-  count(word, sort = TRUE)
-word.freq.table
-# Plotting a Wordcloud
-word.freq.table %>% 
-  filter(n>40) %>%
-  with(wordcloud(word, n,
-                 scale = c(5,0.3),
-                 colors = brewer.pal(8, "Dark2")))
+#Check the structure of 'reviews_all' list
+str(reviews_all)
+#Reviews:
+reviews_all$comments
 
 
-Analyze
+#Applying the sentiment_by function to only the comments column of the reviews_all data using the 'with()' function
+#sent_agg <- sentiment_by(reviews_all$comments). Both perform the same function
+#sentiment_by() function returns the approximate sentiment of the reviews. It returns a data table of element_id, sentence_id, word_count
+#standard deviation and average sentiment for each review
+sent_agg <- with(reviews_all, sentiment_by(comments))
+#Print the first 6 rows of sent_agg
+head(sent_agg)
 
-Visualize
+#Order them based on the sentiment score
+ordered_sent_agg <- sent_agg[order(-ave_sentiment)]
 
+#Plot the histogram of the stars / ratings given by the customers
+#(Rating is between 0 to 5)
+#x <- hist(reviews_all$stars)
+with(reviews_all, hist(stars))
+
+#Plot the histogram of the average sentiment scores for the reviews
+#y <- hist(reviews_all$ave_sentiment)
+with(ordered_sent_agg, hist(ave_sentiment))
+
+#Get the mean rating of the product
+mean(reviews_all$stars)
+
+
+#Average sentiment score. Higher the sentiment score, more positive are the reviews
+mean(ordered_sent_agg$ave_sentiment)
+
+#Get the count of the number of reviews scraped
+number_of_reviews <- nrow(reviews_all)
+
+#Sort these reviews in descending order of their ave_sentiment scores
+sortedReviewsFromBest <- slice(reviews_all, top_n(ordered_sent_agg, number_of_reviews, ave_sentiment)$element_id)
+sortedReviewsFromBest
+
+#Highlight these reviews by sentiment polarity (positive = green; negative = pink) and present them in an html file.
+highlight(sentiment_by(sortedReviewsFromBest$comments))
+
+#Create a subset of the top 3 reviews as 'best_reviews' based on the sentiment score
+best_reviews <- slice(reviews_all, top_n(ordered_sent_agg, 3, ave_sentiment)$element_id)
+best_reviews
+
+#Highlight the top 3 reviews by sentiment polarity (positive = green; negative = pink) and present them in an html file.
+highlight(sentiment_by(best_reviews$comments))
+#with(best_reviews, sentiment_by(comments)) %>% highlight()
+
+#Create a subset of the bottom 3 reviews as 'worst_reviews' based on their sentiment scores
+worst_reviews <- slice(reviews_all, top_n(ordered_sent_agg, 3, -ave_sentiment)$element_id)
+worst_reviews
+
+#Highlight the bottom 3 reviews by sentiment polarity (positive = green; negative = pink) as an html file.
+highlight(sentiment_by(worst_reviews$comments))
+#with(worst_reviews, sentiment_by(comments)) %>% highlight()
+
+#generate word cloud
+reviews_all %>% 
+  bind_rows() %>%
+  unnest_tokens(output = "word", input = 'comments', token = "words") %>%
+  count(word) %>%
+  filter(!(word %in% c("ear","airpods",'apple','phone'))) %>%
+  anti_join(tidytext::stop_words, by = "word") -> word_tb
+
+wordcloud::wordcloud(words = word_tb$word, freq = word_tb$n)
+
+wordcloud2(data=reviews_all$comments, size = 0.7, shape = 'pentagon')
